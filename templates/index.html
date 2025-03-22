@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Model Demo</title>
+</head>
+<body>
+    <h1>Demo</h1>
+    <textarea id="inputText" rows="4" cols="50" placeholder="Enter your input here"></textarea>
+    <button onclick="predict()">Predict</button>
+    <div id="result"></div>
+
+    <script>
+        async function predict() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerText = "Loading..."; // 显示加载状态
+
+            const inputText = document.getElementById('inputText').value;
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json' // 设置请求头为 JSON
+                    },
+                    body: JSON.stringify({ text: inputText }) // 将数据序列化为 JSON
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    resultDiv.innerText = `Prediction: ${result.result}`;
+                } else {
+                    resultDiv.innerText = `Error: ${result.error}`;
+                }
+            } catch (error) {
+                resultDiv.innerText = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

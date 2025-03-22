@@ -1,0 +1,1013 @@
+Welcome to our project¶
+欢迎来到西冰库三人间的机器学习课程项目，接下来我们将会通过基于“Daily News for Stock Market Prediction”数据集的工作，来展示我们的课程学习成果。
+
+由于传统方法（如LSTM+历史股价）对于股市的预测存在滞后性显著（依赖滞后1日以上的价格数据）和噪声敏感度高（易受高频交易噪音干扰）的缺陷。所以我们希望通过基于NLP的新闻预测则通过实时捕捉突发事件（如政策调整、行业危机）和量化市场情绪（BERT情感分析）实现前瞻性建模。
+
+我们从学习的角度，提出了从完全的基础建模方式->到进阶的机器学习（IF—IDF+SVM）模式->以及基于BERT预训练模型的深度学习模式。接下来我们将会逐步展示我们的工作，包括我们所有的尝试。我们会详细的陈述我们遇到的困难和解决思路，同时贴出所有的源码和注释，希望能对您有所帮助。
+
+数据集的简介和数据集的划分
+无论采用什么方法，我们都需要先知道数据集长什么样。所以在开始之前，我们一起来研究一下数据集的构成。在数据集里面有三个csv文件，其中“Combined_News_DJIA.csv”是已经处理好的，兼有股市涨跌作为label和日期匹配的新闻数据，所以我们采用这个文件作为数据来源。在文件里面，首列为date数据（从2008.8.8——2016.7.1），第二列为涨跌label（下跌0，上涨1），第三列到第二十五列为当日新闻。
+
+但是直接使用这些新闻作为输入明显做不到，我们还需要对数据做进一步处理，来作为我们的解码器输入。
+
+# 先导入需要用到的库
+import pandas as pd 
+import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.linear_model import LogisticRegression
+
+# 我们导入文件数据
+data = pd.read_csv('/kaggle/input/stocknews/Combined_News_DJIA.csv')
+
+# 拆分训练集和测试集
+train = data[data['Date'] < '2015-01-01']
+test = data[data['Date'] > '2014-12-31']
+基础的建模实现
+使用n=3的词袋模型，将合并后的新闻数据传入CountVectorizer进行处理，把每个单词分开并统计出现次数。
+
+# 将训练集的所有的新闻汇集成一个长文本串
+trainheadlines = []
+for row in range(0,len(train.index)):
+    trainheadlines.append(' '.join(str(x) for x in train.iloc[row,2:27]))
+
+# 将文本串传给CountVectorizer，用三元组词袋
+basicvectorizer = CountVectorizer(ngram_range=(2,2))
+basictrain = basicvectorizer.fit_transform(trainheadlines)
+
+# 命名model并拟合模型
+basicmodel = LogisticRegression()
+basicmodel = basicmodel.fit(basictrain, train["Label"])
+
+# 将拟合好的模型放到test上检测
+testheadlines = []
+for row in range(0,len(test.index)):
+    testheadlines.append(' '.join(str(x) for x in test.iloc[row,2:27]))
+basictest = basicvectorizer.transform(testheadlines)
+predictions = basicmodel.predict(basictest)
+
+# 生成交叉表
+confusion_matrix = pd.crosstab(test["Label"], predictions, rownames=["Actual"], colnames=["Predicted"])
+
+# 计算每个类别的正确预测百分比
+correct_percentage = np.diag(confusion_matrix) / confusion_matrix.sum(axis=1) * 100
+
+# 将正确预测百分比添加到交叉表中
+confusion_matrix["Correct Percentage"] = correct_percentage
+
+# 展示交叉表
+print(confusion_matrix)
+不同n的词袋模型的预测结果和结论
+n=2：image.png
+
+n=3:image.png
+
+可以看到的是，基础建模通过分词器和简单的逻辑回归达到的效果很不好，当词袋n=2时总准确率大约为61%，但是不同标签偏差严重；当我们提升n=3时，发现出现了模型偏差，似乎模型只关注label为1的样本的特征。基础的建模效果不好，但是我们并没有采用任何的机器学习算法，所以这一切才刚刚开始，不要气馁，让我们继续前进。
+
+问题分析以及进阶算法
+让我们简单回顾上一个基础建模，我们发现只是简单的使用分词器将新闻分为不同单词然后拟合模型，而且分类的模型也是简单的逻辑回归函数。所以我们从此出发思考两个问题：会不会是缺少对于文本的预处理呢？是不是分类头过于简单呢？
+
+接下来，我们就着手来解决这两个问题。当然，还是需要做一些准备工作。
+
+# 首先导入需要的库
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+import pandas as pd
+import numpy as np
+from sklearn.svm import SVC
+from sklearn.metrics import roc_auc_score
+from datetime import date
+
+# 原始数据处理
+data = pd.read_csv('/kaggle/input/stocknews/Combined_News_DJIA.csv')
+
+# 创建合并新闻特征
+data["combined_news"] = data.filter(regex=r"^Top").apply(
+    lambda x: ' '.join(str(content) for content in x if pd.notnull(content)), 
+    axis=1)
+
+# 按日期拆分数据集 (确保数据已按日期排序)
+data['Date'] = pd.to_datetime(data['Date'])
+data = data.sort_values('Date').reset_index(drop=True)
+train = data[data['Date'] <= '2014-12-31']
+test = data[data['Date'] > '2014-12-31']
+文本处理问题
+首先对于文本的处理，我们可以很轻易的发现一个问题：有很多高频词频繁出现在各个新闻中，诸如“and”“the”，但是它们的语义却不明显。自然而然的，我们会想到对这种文本减低权重，所以我们采用TF-IDF方法来代替简单的分词器，通过平衡高频词和低频词的权重，我们就可以实现对于文本更好的预处理。
+
+# 采用TF—IDF处理新闻文本
+feature_extraction = TfidfVectorizer()
+X_train = feature_extraction.fit_transform(train["combined_news"])  # 只在训练集fit
+X_test = feature_extraction.transform(test["combined_news"])       # 测试集用transform
+
+# 标签处理
+y_train = train["Label"].values
+y_test = test["Label"].values
+分类模型问题
+优化了文本处理之后，我们来解决分类模型的问题。之前的分类模型采用简单的逻辑回归，在测试集的表现很不好。所以我么采用SVM的机器学习方法作为新的分类模型，以期达到更好的分类效果。
+
+# 模型训练与评估 
+clf = SVC(probability=True, kernel='rbf', random_state=42)
+clf.fit(X_train, y_train)
+
+predictions = clf.predict_proba(X_test)
+print(f'ROC-AUC: {roc_auc_score(y_test, predictions[:,1]):.4f}')
+机器学习模型的结果和分析
+在采用了TF—IDF+SVM之后模型的ROC-AUC分数达到了0.54，这样的精度用于指导我们炒股还是让我们难以接受（赚钱还是不容易）。那么为什么会有这样的和我们预期相距甚远的结果呢？
+
+经过分析我们发现，虽然我们采用了TF—IDF平衡了文本权重，但是这种方法仍有缺点：首先对于停用词的处理还是不起作用；其次SVM对高维稀疏文本特征敏感，且RBF核在文本分类中未必最优。所以接下来我们从这两个方向来改进这个模型，采用停用词来预处理并且做词干化，然后分别采用随机森林和XGBoost代替SVM来处理矩阵。
+
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from scipy.sparse import hstack
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+
+# 数据加载与预处理
+data = pd.read_csv('/kaggle/input/stocknews/Combined_News_DJIA.csv')
+data["combined_news"] = data.filter(regex=r"^Top").apply(
+    lambda x: ' '.join(str(content) for content in x if pd.notnull(content)), 
+    axis=1
+)
+
+# 按时间排序并拆分数据集
+data['Date'] = pd.to_datetime(data['Date'])
+data = data.sort_values('Date').reset_index(drop=True)
+train = data[data['Date'] <= '2014-12-31'].copy()
+test = data[data['Date'] > '2014-12-31'].copy()
+
+# 文本预处理函数（词干化+停用词）
+stop_words = set(stopwords.words('english'))
+stemmer = PorterStemmer()
+def preprocess_text(text):
+    words = word_tokenize(str(text).lower())
+    words = [w for w in words if w.isalpha() and w not in stop_words]
+    words = [stemmer.stem(w) for w in words]
+    return ' '.join(words)
+
+# 应用预处理
+train['processed_news'] = train['combined_news'].apply(preprocess_text)
+test['processed_news'] = test['combined_news'].apply(preprocess_text)
+
+# TF-IDF特征提取（优化参数）
+tfidf = TfidfVectorizer(
+    ngram_range=(1, 2),
+    max_features=8000,
+    sublinear_tf=True
+)
+X_train_tfidf = tfidf.fit_transform(train['processed_news'])
+X_test_tfidf = tfidf.transform(test['processed_news'])
+
+# 标签处理
+y_train = train["Label"].values
+y_test = test["Label"].values
+使用随机森林分类
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
+
+# 使用随机森林
+param_grid = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [None, 10, 20, 30],
+    'min_samples_split': [2, 5, 10],
+    'class_weight': ['balanced', None]
+}
+model = RandomForestClassifier(random_state=42)
+
+# 时间序列交叉验证
+tscv = TimeSeriesSplit(n_splits=5)
+grid_search = GridSearchCV(model, param_grid, cv=tscv, scoring='roc_auc', n_jobs=-1)
+grid_search.fit(X_train_tfidf, y_train)
+
+# 最佳模型评估
+best_model_rf = grid_search.best_estimator_
+prob_predictions_rf = best_model_rf.predict_proba(X_test_tfidf)
+predictions_rf = best_model_rf.predict(X_test_tfidf)
+
+print(f'Optimized ROC-AUC with Random Forest: {roc_auc_score(y_test, prob_predictions_rf[:,1]):.4f}')
+print(f'Accuracy with Random Forest: {accuracy_score(y_test, predictions_rf):.4f}')
+用XGBoost分类
+
+import xgboost as xgb
+from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
+
+# 使用XGBoost
+param_grid = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [3, 6, 9],
+    'learning_rate': [0.01, 0.1, 0.2],
+    'subsample': [0.5, 0.7, 1.0],
+    'colsample_bytree': [0.5, 0.7, 1.0],
+    'scale_pos_weight': [1, 10, 100]  # 处理类别不平衡问题
+}
+model = xgb.XGBClassifier(use_label_encoder=False, eval_metric='auc', random_state=42)
+
+# 时间序列交叉验证
+tscv = TimeSeriesSplit(n_splits=5)
+grid_search = GridSearchCV(model, param_grid, cv=tscv, scoring='roc_auc', n_jobs=-1)
+grid_search.fit(X_train_tfidf, y_train)
+
+# 最佳模型评估
+best_model_xgb = grid_search.best_estimator_
+prob_predictions_xgb = best_model_xgb.predict_proba(X_test_tfidf)
+predictions_xgb = best_model_xgb.predict(X_test_tfidf)
+
+print(f'Optimized ROC-AUC with XGBoost: {roc_auc_score(y_test, prob_predictions_xgb[:,1]):.4f}')
+print(f'Accuracy with XGBoost: {accuracy_score(y_test, predictions_xgb):.4f}')
+深度学习方法
+由上面几种模型我们不难得出：简单词袋模型难以捕捉金融新闻中的复杂模式，传统的机器学习方法和简单的文本处理也难以达到很好的效果。看来一般的处理方式已经难以实现较高的准度了。幸好我们在2025年，已经拥有了BERT作为文本特征提取工具，我们也拥有了加速矩阵计算的GPU。那么接下来，就让我们拥抱深度学习吧。
+
+文本简单预处理和预训练的BERT模型的微调
+规范输入维度来适应BERT的分词器
+
+采用bert-base-uncased预训练模型
+
+import pandas as pd
+import torch
+from transformers import BertTokenizer, BertModel, AdamW, get_linear_schedule_with_warmup
+from torch.utils.data import DataLoader, Dataset
+from sklearn.metrics import accuracy_score
+import numpy as np
+
+# 导入csv文件
+data = pd.read_csv('/kaggle/input/stocknews/Combined_News_DJIA.csv')
+
+# 创建合并新闻特征（保留原始文本）
+data["combined_news"] = data.filter(regex=r"^Top").apply(
+    lambda x: ' '.join(str(content) for content in x if pd.notnull(content)), 
+    axis=1)
+
+# 按日期拆分数据集 (确保数据已按日期排序)
+data['Date'] = pd.to_datetime(data['Date'])
+data = data.sort_values('Date').reset_index(drop=True)
+train = data[data['Date'] <= '2014-12-31']
+test = data[data['Date'] > '2014-12-31']
+
+# 初始化BERT分词器
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
+# 对训练集和测试集分别进行编码
+def bert_encode(texts, tokenizer, max_len=512):
+    return tokenizer(
+        texts.tolist(),
+        add_special_tokens=True,
+        max_length=max_len,
+        truncation=True,
+        padding='max_length',
+        return_attention_mask=True,
+        return_tensors='pt'
+    )
+
+train_encodings = bert_encode(train['combined_news'], tokenizer)
+test_encodings = bert_encode(test['combined_news'], tokenizer)
+
+# 获取标签
+train_labels = torch.tensor(train['Label'].values)
+test_labels = torch.tensor(test['Label'].values)
+
+# 定义PyTorch Dataset
+class NewsDataset(Dataset):
+    def __init__(self, encodings, labels):
+        self.encodings = encodings
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        item['labels'] = self.labels[idx]
+        return item
+
+# 创建训练集和测试集的DataLoader
+train_dataset = NewsDataset(train_encodings, train_labels)
+test_dataset = NewsDataset(test_encodings, test_labels)
+
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+
+# 定义BERT分类模型
+class BertClassifier(nn.Module):
+    def __init__(self, dropout=0.5):
+        super(BertClassifier, self).__init__()
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.dropout = nn.Dropout(dropout)
+        self.linear = nn.Linear(768, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, input_ids, attention_mask):
+        _, pooled_output = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=False)
+        dropout_output = self.dropout(pooled_output)
+        linear_output = self.linear(dropout_output)
+        proba = self.sigmoid(linear_output)
+        return proba
+
+# 定义设备
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# 初始化模型、优化器和学习率调度器
+model = BertClassifier().to(device)
+optimizer = AdamW(model.parameters(), lr=2e-5, eps=1e-8)
+total_steps = len(train_loader) * 3  # 3个epoch
+scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
+
+# 定义训练函数
+def train(model, data_loader, optimizer, scheduler):
+    model.train()
+    total_loss = 0
+    for batch in data_loader:
+        optimizer.zero_grad()
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        labels = batch['labels'].to(device).float().unsqueeze(1)
+        outputs = model(input_ids, attention_mask)
+        loss = nn.BCELoss()(outputs, labels)
+        total_loss += loss.item()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+    return total_loss / len(data_loader)
+
+# 定义评估函数
+def evaluate(model, data_loader):
+    model.eval()
+    preds, true_labels = [], []
+    with torch.no_grad():
+        for batch in data_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device).float().unsqueeze(1)
+            outputs = model(input_ids, attention_mask)
+            preds.extend(outputs.cpu().numpy())
+            true_labels.extend(labels.cpu().numpy())
+    preds = (np.array(preds) > 0.5).astype(int)
+    return accuracy_score(true_labels, preds)
+
+# 训练模型
+epochs = 3
+for epoch in range(epochs):
+    train_loss = train(model, train_loader, optimizer, scheduler)
+    print(f"Epoch {epoch + 1}, Training loss: {train_loss}")
+
+# 评估模型
+accuracy = evaluate(model, test_loader)
+print(f"Test Accuracy: {accuracy}")
+初代问题分析以及优化思路
+初代测试集结果：
+
+34BB39FC3D7BEB0C75C8DCF9302735A9.png
+
+从准度可以看到非常不理想，那我们就需要对模型和数据处理方式上入手对代码进行优化。
+
+首先我们的每日数据是由25条新闻组成的，显而易见的是新闻之间的文本是弱相关，但是我们在处理的时候是直接拼接。所以我们可以在拼接的时候在每条新闻之间添加分词器可以识别的特殊分割符，以此来帮助模型分辨不同的新闻。
+
+其次新闻对市场的影响反映到股价指标上可能会有一定的延后性，所以我们可以采取类似滑动窗口的形式，用多日的新闻加上当日的新闻文本来进行预测。
+
+还有就是之前的框架直接用一层全连接+sigmoid就输出，分类头太简单；而且训练轮次太少。我们可以尝试更深更复杂的分类头和更多的训练轮次以求达到更好的效果。
+
+并且没有用到权重衰减的正则化参数，未启用Warmup初期学习率过高，BERT隐藏测的Dropout率太低，训练的参数太多；我们启用权重衰减，启用Warmup，提高Dropout率，冻结BERT部分参数只训练最后四层和分类头。
+
+此外bert-base-uncased预训练模型对于金融文本所需推理能力可能欠缺，所以我们尝试换为FinBERT模型来提升性能；以及新闻可能蕴含时序数据，我们可以尝试在分类头前引入LSTM来捕捉时序信息。
+
+最后一点是从新闻对于股市的影响很大一部分源于新闻带来的情绪，单独的BERT得到的分类向量能否捕获里面的情绪特征存疑，所以我们尝试使用textblob库来捕捉情绪向量（新闻标题信息充足且文本长度短正适合这个库），得到的特征和BERT捕捉的向量融合到一起作为分类依据。
+
+优化方案1
+添加特殊分隔符；将单层全连接改为两层全连接；增加训练轮次为15轮。
+
+冻结BERT底层参数 保留通用语义特征，减少过拟合。
+
+启用权重衰减，启用Warmup，BERT隐藏层Dropout率提高。
+
+同时增加了ROC曲线的可视化和F1分数作为模型评估标准，增加了loss的可视化来方便调参。
+
+import pandas as pd
+import torch
+from transformers import BertTokenizer, BertModel, get_linear_schedule_with_warmup
+from torch.utils.data import DataLoader, Dataset
+from sklearn.metrics import accuracy_score, f1_score, roc_curve, auc
+import numpy as np
+import torch.nn as nn
+import matplotlib.pyplot as plt
+
+# 导入csv文件
+data = pd.read_csv('/kaggle/input/stocknews/Combined_News_DJIA.csv')
+
+# 初始化BERT分词器
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
+# 创建合并新闻特征（保留原始文本）同时添加特殊分隔符帮助模型识别不同新闻的边界
+# 合并时用 tokenizer.sep_token 作为分隔符
+data["combined_news"] = data.filter(regex=r"^Top").apply(
+    lambda x: f' {tokenizer.sep_token} '.join(
+        str(content) for content in x if pd.notnull(content)
+    ),
+    axis=1
+)
+
+# 按日期拆分数据集 (确保数据已按日期排序)
+data['Date'] = pd.to_datetime(data['Date'])
+data = data.sort_values('Date').reset_index(drop=True)
+train = data[data['Date'] <= '2014-12-31']
+test = data[data['Date'] > '2014-12-31']
+
+# 对训练集和测试集分别进行编码
+def bert_encode(texts, tokenizer, max_len=512):
+    """
+    使用BERT分词器对文本进行编码。
+
+    参数:
+    texts (pd.Series): 需要编码的文本序列。
+    tokenizer (BertTokenizer): BERT分词器实例。
+    max_len (int): 文本的最大长度，超过该长度的文本将被截断。
+
+    返回:
+    dict: 包含编码后的input_ids, attention_mask等张量的字典。
+    """
+    return tokenizer(
+        texts.tolist(),  # 将文本序列转换为列表
+        add_special_tokens=True,  # 添加特殊的CLS和SEP标记
+        max_length=max_len,  # 设置最大长度，超过该长度的文本将被截断
+        truncation=True,  # 启用截断
+        padding='max_length',  # 填充到最大长度
+        return_attention_mask=True,  # 返回attention mask
+        return_tensors='pt'  # 返回PyTorch张量
+    )
+
+train_encodings = bert_encode(train['combined_news'], tokenizer)
+test_encodings = bert_encode(test['combined_news'], tokenizer)
+
+# 获取标签
+train_labels = torch.tensor(train['Label'].values)
+test_labels = torch.tensor(test['Label'].values)
+
+# 定义PyTorch Dataset
+class NewsDataset(Dataset):
+    def __init__(self, encodings, labels):
+        self.encodings = encodings
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        """
+        根据索引获取数据项。
+
+        参数:
+        idx (int): 数据项的索引。
+
+        返回:
+        dict: 包含input_ids, attention_mask和labels的字典。
+        """
+        item = {key: val[idx].clone().detach() for key, val in self.encodings.items()}  # 获取编码后的输入
+        item['labels'] = self.labels[idx]  # 获取对应的标签
+        return item
+
+# 创建训练集和测试集的DataLoader
+train_dataset = NewsDataset(train_encodings, train_labels)
+test_dataset = NewsDataset(test_encodings, test_labels)
+
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+
+# 定义BERT分类模型
+class BertClassifier(nn.Module):
+    def __init__(self, dropout=0.3):
+        """
+        初始化BERT分类模型。
+
+        参数:
+        dropout (float): dropout的概率，默认为0.3。
+        """
+        super(BertClassifier, self).__init__()
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.dropout = nn.Dropout(dropout)
+        # 简化结构：768 → 128 → 1
+        self.classifier = nn.Sequential(
+            nn.Linear(768, 128),
+            nn.BatchNorm1d(128),  # 添加BatchNorm
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(128, 1),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, input_ids, attention_mask):
+        """
+        前向传播函数。
+
+        参数:
+        input_ids (torch.Tensor): 输入的token ids。
+        attention_mask (torch.Tensor): attention mask，用于指示哪些token是padding。
+
+        返回:
+        torch.Tensor: 分类概率。
+        """
+        outputs = self.bert(input_ids, attention_mask, return_dict=False)
+        pooled_output = outputs[1]
+        return self.classifier(pooled_output)
+
+# 定义设备
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# 初始化模型、优化器和学习率调度器
+model = BertClassifier().to(device)
+optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5, eps=1e-8, weight_decay=0.01)  # 启用权重衰减
+total_steps = len(train_loader) * 15  # 15个epoch
+warmup_steps = int(0.1 * total_steps)  # 10%的步骤用于Warmup
+scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
+
+# 定义训练函数
+def train(model, data_loader, optimizer, scheduler):
+    model.train()
+    total_loss = 0
+    for batch in data_loader:
+        optimizer.zero_grad()
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        labels = batch['labels'].to(device).float().unsqueeze(1)
+        outputs = model(input_ids, attention_mask)
+        loss = nn.BCELoss()(outputs, labels)
+        total_loss += loss.item()
+        loss.backward()
+        optimizer.step()
+    scheduler.step()  # 将学习率调度器的更新移到每个Epoch结束后
+    return total_loss / len(data_loader)
+
+# 定义评估函数
+def evaluate(model, data_loader):
+    model.eval()
+    preds, true_labels = [], []
+    all_probs = []  # 保存原始概率用于ROC曲线
+    with torch.no_grad():
+        for batch in data_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device).float().unsqueeze(1)
+            outputs = model(input_ids, attention_mask)
+            all_probs.extend(outputs.cpu().numpy())  # 保存原始概率
+            preds.extend((outputs > 0.5).cpu().numpy())
+            true_labels.extend(labels.cpu().numpy())
+    
+    # 将列表转换为numpy数组并展平
+    preds_np = np.array(preds).flatten()
+    true_labels_np = np.array(true_labels).flatten()
+    probs_np = np.array(all_probs).flatten()
+    
+    # 计算准确率和F1分数
+    accuracy = accuracy_score(true_labels_np, preds_np)
+    f1 = f1_score(true_labels_np, preds_np)
+    
+    return accuracy, f1, probs_np, true_labels_np
+
+# 添加绘制ROC曲线的函数
+def plot_roc_curve(y_true, y_probs):
+    # 计算ROC曲线的假阳性率和真阳性率
+    fpr, tpr, _ = roc_curve(y_true, y_probs)
+    roc_auc = auc(fpr, tpr)
+    
+    # 绘制ROC曲线
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')  # 随机猜测的基准
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC) Curve')
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    plt.show()
+
+# 添加绘制损失曲线的函数
+def plot_loss_curve(losses):
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(losses) + 1), losses, marker='o', linestyle='-', color='blue')
+    plt.xlabel('Epoch')
+    plt.ylabel('Training Loss')
+    plt.title('Training Loss Over Epochs')
+    plt.grid(True)
+    plt.xticks(range(1, len(losses) + 1))
+    plt.tight_layout()
+    plt.show()
+
+# 训练模型
+epochs = 15
+losses = []  # 用于存储每个epoch的损失值
+for epoch in range(epochs):
+    train_loss = train(model, train_loader, optimizer, scheduler)
+    losses.append(train_loss)  # 记录每个epoch的损失值
+    print(f"Epoch {epoch + 1}, Training loss: {train_loss}")
+
+# 绘制损失曲线
+plot_loss_curve(losses)
+
+# 评估模型
+accuracy, f1, probs, true_labels = evaluate(model, test_loader)
+print(f"Test Accuracy: {accuracy}")
+print(f"Test F1 Score: {f1}")
+
+# 绘制ROC曲线
+plot_roc_curve(true_labels, probs)
+优化方案2
+从方案一的训练结果可以看到，微调的模型loss平缓，似乎是没有拟合，所以我们在1的基础上采用更多的训练轮次（训练5轮，10轮，20轮），并且采用早停机制限制训练轮次。
+
+之前所有模型都采用bert-base-uncased预训练模型，推理能力欠缺，所以换为FinBERT模型。
+
+在一的基础上采用了验证集来实时检测模型是否过拟合
+
+增加了textblob库作为情感特征分析。
+
+import pandas as pd
+import torch
+from transformers import BertTokenizer, BertModel, get_linear_schedule_with_warmup
+from torch.utils.data import DataLoader, Dataset
+from sklearn.metrics import accuracy_score, f1_score, roc_curve, auc
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+import torch.nn as nn
+import matplotlib.pyplot as plt
+import os
+import re
+from textblob import TextBlob
+
+# 数据加载
+data = pd.read_csv('/kaggle/input/stocknews/Combined_News_DJIA.csv')
+
+# 初始化BERT分词器
+tokenizer = BertTokenizer.from_pretrained('yiyanghkust/finbert-tone')
+
+# 文本清洗函数
+def clean_text(text):
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'http\S+', '', text)
+    text = re.sub(r'[^a-zA-Z0-9.,!?$%-]+', ' ', text)
+    return text.strip()
+
+# 提取TextBlob特征
+def extract_textblob_features(text):
+    analysis = TextBlob(text)
+    return {
+        'polarity': analysis.sentiment.polarity,
+        'subjectivity': analysis.sentiment.subjectivity,
+        'word_count': len(text.split()),
+        'exclamation': text.count('!'),
+        'question': text.count('?'),
+        'dollar_sign': text.count('$')
+    }
+
+# 预处理流程
+print("Processing text features...")
+textblob_features = []
+for col in data.filter(regex=r"^Top").columns:
+    data[col] = data[col].apply(lambda x: clean_text(str(x)))
+    features = data[col].apply(lambda x: extract_textblob_features(str(x)))
+    textblob_features.append(pd.DataFrame(features.tolist()))
+
+# 合并每日特征
+daily_features = []
+for i in range(len(data)):
+    day_features = {
+        'polarity': np.mean([df.iloc[i]['polarity'] for df in textblob_features]),
+        'subjectivity': np.mean([df.iloc[i]['subjectivity'] for df in textblob_features]),
+        'word_count': np.sum([df.iloc[i]['word_count'] for df in textblob_features]),
+        'exclamation': np.sum([df.iloc[i]['exclamation'] for df in textblob_features]),
+        'question': np.sum([df.iloc[i]['question'] for df in textblob_features]),
+        'dollar_sign': np.sum([df.iloc[i]['dollar_sign'] for df in textblob_features])
+    }
+    daily_features.append(day_features)
+
+textblob_df = pd.DataFrame(daily_features)
+feature_columns = textblob_df.columns.tolist()
+
+# 标准化特征
+scaler = StandardScaler()
+textblob_df[feature_columns] = scaler.fit_transform(textblob_df[feature_columns])
+
+# 合并新闻文本
+print("Combining news texts...")
+data["combined_news"] = data.filter(regex=r"^Top").apply(
+    lambda x: f' {tokenizer.sep_token} '.join(
+        str(content) for content in x if pd.notnull(content)
+    ),
+    axis=1
+)
+
+# 日期处理
+data['Date'] = pd.to_datetime(data['Date'])
+data = data.sort_values('Date').reset_index(drop=True)
+
+# 数据集划分
+print("Splitting datasets...")
+train = data[data['Date'] <= '2014-12-31']
+val = data[(data['Date'] > '2014-12-31') & (data['Date'] <= '2015-12-31')]
+test = data[data['Date'] > '2015-12-31']
+
+# 获取特征数据
+train_features = textblob_df.iloc[train.index].values
+val_features = textblob_df.iloc[val.index].values
+test_features = textblob_df.iloc[test.index].values
+
+# BERT编码函数
+def bert_encode(texts, tokenizer, max_len=256):
+    return tokenizer(
+        texts.tolist(),
+        max_length=max_len,
+        truncation=True,
+        padding='max_length',
+        return_tensors='pt'
+    )
+
+# 数据编码
+print("Encoding text data...")
+train_encodings = bert_encode(train['combined_news'], tokenizer)
+val_encodings = bert_encode(val['combined_news'], tokenizer)
+test_encodings = bert_encode(test['combined_news'], tokenizer)
+
+# 标签处理
+train_labels = torch.tensor(train['Label'].values)
+val_labels = torch.tensor(val['Label'].values)
+test_labels = torch.tensor(test['Label'].values)
+
+# 自定义数据集类
+class HybridDataset(Dataset):
+    def __init__(self, encodings, features, labels):
+        self.encodings = encodings
+        self.features = torch.tensor(features, dtype=torch.float32)
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        item = {key: val[idx].clone().detach() for key, val in self.encodings.items()}
+        item['text_features'] = self.features[idx]
+        item['labels'] = self.labels[idx]
+        return item
+
+# 创建DataLoader
+print("Creating data loaders...")
+train_dataset = HybridDataset(train_encodings, train_features, train_labels)
+val_dataset = HybridDataset(val_encodings, val_features, val_labels)
+test_dataset = HybridDataset(test_encodings, test_features, test_labels)
+
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+
+# 混合模型架构
+class HybridClassifier(nn.Module):
+    def __init__(self, num_text_features, dropout=0.2):
+        super().__init__()
+        self.bert = BertModel.from_pretrained('yiyanghkust/finbert-tone')
+        
+        # 冻结前6层
+        for layer in self.bert.encoder.layer[:6]:
+            for param in layer.parameters():
+                param.requires_grad = False
+                
+        # BERT输出处理
+        self.bert_dropout = nn.Dropout(dropout)
+        
+        # 文本特征处理
+        self.text_feature_processor = nn.Sequential(
+            nn.Linear(num_text_features, 32),
+            nn.GELU(),
+            nn.LayerNorm(32)
+        )
+        
+        # 联合分类器
+        self.classifier = nn.Sequential(
+            nn.Linear(768 + 32, 256),
+            nn.GELU(),
+            nn.LayerNorm(256),
+            nn.Dropout(dropout),
+            nn.Linear(256, 64),
+            nn.GELU(),
+            nn.LayerNorm(64),
+            nn.Linear(64, 1)
+        )
+        
+        # 参数初始化
+        for module in self.classifier:
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_normal_(module.weight)
+
+    def forward(self, input_ids, attention_mask, text_features):
+        # BERT处理
+        outputs = self.bert(input_ids, attention_mask, return_dict=False)
+        pooled_output = outputs[1]
+        bert_output = self.bert_dropout(pooled_output)
+        
+        # 文本特征处理
+        text_feature_output = self.text_feature_processor(text_features)
+        
+        # 特征融合
+        combined = torch.cat((bert_output, text_feature_output), dim=1)
+        return self.classifier(combined)
+
+# 设备设置
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# 损失函数
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, inputs, targets):
+        bce_loss = nn.BCEWithLogitsLoss(reduction='none')(inputs, targets)
+        pt = torch.exp(-bce_loss)
+        loss = self.alpha * (1 - pt)**self.gamma * bce_loss
+        return loss.mean()
+
+# 模型初始化
+num_text_features = train_features.shape[1]
+model = HybridClassifier(num_text_features=num_text_features).to(device)
+
+# 训练参数
+gradient_accumulation_steps = 4
+epochs = 10
+total_steps = len(train_loader) * epochs // gradient_accumulation_steps
+
+# 优化器配置
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=5e-5,
+    weight_decay=0.01
+)
+scheduler = get_linear_schedule_with_warmup(
+    optimizer,
+    num_warmup_steps=int(0.05 * total_steps),
+    num_training_steps=total_steps
+)
+loss_fn = FocalLoss(alpha=0.5)
+
+# 训练函数
+def train(model, data_loader, optimizer, scheduler):
+    model.train()
+    total_loss = 0
+    optimizer.zero_grad()
+    
+    for batch_idx, batch in enumerate(data_loader):
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        text_features = batch['text_features'].to(device)
+        labels = batch['labels'].to(device).float().unsqueeze(1)
+        
+        outputs = model(input_ids, attention_mask, text_features)
+        loss = loss_fn(outputs, labels)
+        loss = loss / gradient_accumulation_steps
+        loss.backward()
+        
+        if (batch_idx + 1) % gradient_accumulation_steps == 0 or batch_idx == len(data_loader)-1:
+            optimizer.step()
+            optimizer.zero_grad()
+            scheduler.step()
+            
+        total_loss += loss.item() * gradient_accumulation_steps
+        
+    return total_loss / len(data_loader)
+
+# 评估函数
+def evaluate(model, data_loader):
+    model.eval()
+    total_loss = 0
+    preds, true_labels = [], []
+    all_probs = []
+    
+    with torch.no_grad():
+        for batch in data_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            text_features = batch['text_features'].to(device)
+            labels = batch['labels'].to(device).float().unsqueeze(1)
+            
+            outputs = model(input_ids, attention_mask, text_features)
+            loss = loss_fn(outputs, labels)
+            
+            total_loss += loss.item()
+            probs = torch.sigmoid(outputs)
+            all_probs.extend(probs.cpu().numpy())
+            preds.extend((probs > 0.5).cpu().numpy())
+            true_labels.extend(labels.cpu().numpy())
+    
+    preds_np = np.array(preds).flatten()
+    true_labels_np = np.array(true_labels).flatten()
+    probs_np = np.array(all_probs).flatten()
+    
+    accuracy = accuracy_score(true_labels_np, preds_np)
+    f1 = f1_score(true_labels_np, preds_np)
+    
+    return total_loss / len(data_loader), accuracy, f1, probs_np, true_labels_np
+
+# 可视化函数
+def plot_roc_curve(y_true, y_probs):
+    fpr, tpr, _ = roc_curve(y_true, y_probs)
+    roc_auc = auc(fpr, tpr)
+    
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, color='darkorange', lw=2, 
+             label=f'ROC curve (area = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve')
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    plt.show()
+
+def plot_loss_curve(train_losses, val_losses):
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_losses, label='Training Loss', marker='o')
+    plt.plot(val_losses, label='Validation Loss', marker='o')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training Progress')
+    plt.legend()
+    plt.grid(True)
+    plt.xticks(range(len(train_losses)), range(1, len(train_losses)+1))
+    plt.tight_layout()
+    plt.show()
+
+# 训练循环
+print("\nStarting training...")
+train_losses = []
+val_losses = []
+best_val_loss = float('inf')
+patience = 5
+trigger_times = 0
+
+for epoch in range(epochs):
+    # 训练阶段
+    train_loss = train(model, train_loader, optimizer, scheduler)
+    
+    # 验证阶段
+    val_loss, val_acc, val_f1, _, _ = evaluate(model, val_loader)
+    
+    # 记录损失
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
+    
+    # 早停机制
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        trigger_times = 0
+    else:
+        trigger_times += 1
+        if trigger_times >= patience:
+            print(f'Early stopping at epoch {epoch+1}')
+            break
+    
+    # 打印进度
+    print(f"Epoch {epoch+1:02d}/{epochs} | "
+          f"Train Loss: {train_loss:.4f} | "
+          f"Val Loss: {val_loss:.4f} | "
+          f"Val Acc: {val_acc:.4f} | "
+          f"Val F1: {val_f1:.4f}")
+
+# 损失曲线
+plot_loss_curve(train_losses, val_losses)
+
+# 最终测试
+print("\nEvaluating on test set...")
+test_loss, test_acc, test_f1, test_probs, test_true = evaluate(model, test_loader)
+print(f"Test Loss: {test_loss:.4f} | Accuracy: {test_acc:.4f} | F1 Score: {test_f1:.4f}")
+
+# ROC曲线
+plot_roc_curve(test_true, test_probs)
+
+# 模型保存
+output_dir = '/kaggle/working'
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+torch.save(model.state_dict(), os.path.join(output_dir, 'hybrid_model.pth'))
+print(f"Model saved to {os.path.join(output_dir, 'hybrid_model.pth')}")
+Processing text features...
+Combining news texts...
+Splitting datasets...
+Encoding text data...
+Creating data loaders...
+
+Starting training...
+Epoch 01/10 | Train Loss: 0.1234 | Val Loss: 0.0933 | Val Acc: 0.4762 | Val F1: 0.6452
+Epoch 02/10 | Train Loss: 0.0952 | Val Loss: 0.0889 | Val Acc: 0.4921 | Val F1: 0.6522
+Epoch 03/10 | Train Loss: 0.0894 | Val Loss: 0.0869 | Val Acc: 0.4881 | Val F1: 0.5905
+Epoch 04/10 | Train Loss: 0.0894 | Val Loss: 0.0872 | Val Acc: 0.4881 | Val F1: 0.5956
+Epoch 05/10 | Train Loss: 0.0879 | Val Loss: 0.0883 | Val Acc: 0.4683 | Val F1: 0.6339
+Epoch 06/10 | Train Loss: 0.0873 | Val Loss: 0.0881 | Val Acc: 0.4881 | Val F1: 0.6282
+Epoch 07/10 | Train Loss: 0.0867 | Val Loss: 0.0882 | Val Acc: 0.5000 | Val F1: 0.6111
+Early stopping at epoch 8
+
+Evaluating on test set...
+Test Loss: 0.0847 | Accuracy: 0.6111 | F1 Score: 0.6667
+
+Model saved to /kaggle/working/hybrid_model.pth
+在添加了Textblob库之后，我们尝试了5轮、10轮、20轮、40轮的训练轮次。通过不同轮次训练的监测曲线我们发现：在超过十轮之后valid_loss就会由下降变为上升、F1分数下降、ROC曲线向右下角移动、模型表现为过拟合。
+
+所以我们选择最佳的微调轮次为10轮。
