@@ -1,38 +1,184 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Model Demo</title>
+    <title>Market Analysis Demo</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --success-color: #27ae60;
+            --error-color: #e74c3c;
+            --text-color: #34495e;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem;
+            background-color: #f5f6fa;
+            color: var(--text-color);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        #inputText {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #dfe6e9;
+            border-radius: 8px;
+            resize: vertical;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+            margin-bottom: 1.5rem;
+        }
+
+        #inputText:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 8px rgba(52, 152, 219, 0.2);
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: block;
+            margin: 0 auto 2rem;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .result-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .result-section:hover {
+            transform: translateY(-2px);
+        }
+
+        .report-section {
+            white-space: pre-wrap;
+            margin-top: 1.5rem;
+            padding: 1.2rem;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid var(--accent-color);
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        #basicResult {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 1.2rem;
+            height: 1.2rem;
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid var(--accent-color);
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: var(--error-color);
+            background: #fdecea;
+            padding: 1rem;
+            border-radius: 6px;
+            border-left: 4px solid var(--error-color);
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 1rem;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            #inputText {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
 </head>
 <body>
-    <h1>Demo</h1>
-    <textarea id="inputText" rows="4" cols="50" placeholder="Enter your input here"></textarea>
-    <button onclick="predict()">Predict</button>
-    <div id="result"></div>
+    <h1>📈 Market Analysis Demo</h1>
+    <textarea 
+        id="inputText" 
+        rows="6"
+        placeholder="Enter today's market news here..."
+    ></textarea>
+    
+    <button onclick="predict()">
+        Analyze Text
+    </button>
+
+    <div class="result-section">
+        <div id="basicResult"></div>
+        <div id="reportResult" class="report-section"></div>
+    </div>
 
     <script>
         async function predict() {
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerText = "Loading..."; // 显示加载状态
+            const basicDiv = document.getElementById('basicResult');
+            const reportDiv = document.getElementById('reportResult');
+            basicDiv.innerHTML = `<span class="loading"></span>Analyzing...`;
+            reportDiv.innerHTML = "";
 
             const inputText = document.getElementById('inputText').value;
 
             try {
                 const response = await fetch('/predict', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json' // 设置请求头为 JSON
-                    },
-                    body: JSON.stringify({ text: inputText }) // 将数据序列化为 JSON
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ text: inputText })
                 });
 
                 const result = await response.json();
                 if (response.ok) {
-                    resultDiv.innerText = `Prediction: ${result.result}`;
+                    basicDiv.innerHTML = `<strong>📊 Market Trend:</strong> ${result.result}`;
+                    reportDiv.innerHTML = `<strong>🔍 Detailed Analysis:</strong>\n${result.report}`;
                 } else {
-                    resultDiv.innerText = `Error: ${result.error}`;
+                    basicDiv.innerHTML = `<div class="error">⚠️ Error: ${result.error}</div>`;
                 }
             } catch (error) {
-                resultDiv.innerText = `Error: ${error.message}`;
+                basicDiv.innerHTML = `<div class="error">⚠️ Connection Error: ${error.message}</div>`;
             }
         }
     </script>
