@@ -3,6 +3,31 @@
 <head>
     <title>Market Analysis Demo</title>
     <style>
+        #basicResult {
+            height: auto; /* 自动高度 */
+            overflow-y: hidden; /* 移除滚动条 */
+            margin: 10px 0;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 0.5rem;
+            min-height: 50px; /* 最小高度保持美观 */
+        }
+
+        /* 新增紧凑布局样式 */
+        .compact-analysis {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+            padding: 0.5rem;
+        }
+
+        /* 调整详细报告区域填充剩余空间 */
+        #reportResult {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
         /* 原有样式保持不变 */
         :root {
             --primary-color: #2c3e50;
@@ -159,12 +184,12 @@
     <div class="result-container">
         <!-- 第一列：详细报告 -->
         <div class="result-column">
-            <div class="analysis-section">
+            <div class="analysis-section" style="flex: 0.25;"> <!-- 高度比例改为1/4 -->
                 <h3>📊 基础分析结果</h3>
                 <div id="basicResult" class="analysis-list"></div>
             </div>
             
-            <div class="analysis-section">
+            <div class="analysis-section" style="flex: 0.75;"> <!-- 剩余3/4空间 -->
                 <h3>🔍 详细报告</h3>
                 <div id="reportResult" class="analysis-list"></div>
             </div>
@@ -230,8 +255,9 @@
             if (response.ok) {
                 // 基础结果处理
                 basicDiv.innerHTML = `
-                    <div class="analysis-item">
-                        <strong>市场趋势:</strong> ${result.result}
+                    <div class="compact-analysis">
+                    <div><strong>📈 趋势:</strong> ${result.result}</div>
+                    <div><strong>📊 概率:</strong> ${result.probability}%</div>
                     </div>
                 `;
 

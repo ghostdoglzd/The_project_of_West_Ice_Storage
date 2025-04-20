@@ -60,7 +60,8 @@ def predict():
         model_path = "./model/model.pth"
         model_wrapper = Pre.ModelWrapper(model_path, example_text=text)
         prediction = model_wrapper.predict(text)
-        res = "今日大盘看涨" if prediction == 1 else "今日大盘看涨"
+        res = "今日大盘看涨" if prediction>0.5 else "今日大盘看涨"
+        prob = prediction if prediction>0.5 else 1 - prediction
         report_data = generate_report(text)  # 修改为接收字典
 
         # 组合关键词标记的报告
@@ -73,7 +74,8 @@ def predict():
         deepseek_analysis = get_deepseek_analysis(analysis_prompt)
 
         return jsonify({
-            'result': res,
+            'result': res,  # 返回预测结果
+            'probability': prob,  # 返回概率
             'report': marked_report,  # 包含**标记的报告
             'keywords': report_data["keywords"],  # 单独传递关键词列表
             'deepseek_analysis': deepseek_analysis

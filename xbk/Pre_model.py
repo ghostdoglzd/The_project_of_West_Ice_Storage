@@ -90,4 +90,4 @@ class ModelWrapper:
             output = self.model(input_ids, attention_mask, features_tensor)
             probability = torch.sigmoid(output).item()
         
-        return 1 if probability > 0.5 else 0
+        return probability
