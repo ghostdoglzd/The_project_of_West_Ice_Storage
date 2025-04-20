@@ -447,7 +447,7 @@ def generate_report(text, risk_top_n=5, industry_top_n=3):
     industry_matcher = IndustryMatcher(industry_terms)
     industries = industry_matcher.match(text, entities, top_n=industry_top_n)
     
-    # 报告生成（增强版）
+    # 定义报告头部（新增部分）
     risk_header = random.choice([
         "【风险预警雷达】检测到以下投资风险因素：",
         "【风险扫描报告】发现潜在风险指标：",
@@ -461,18 +461,24 @@ def generate_report(text, risk_top_n=5, industry_top_n=3):
         "【行业趋势洞察】建议关注方向：",
         "【板块机会提示】值得留意领域："
     ])
+
+    # 提取关键词
+    keywords = set()
+    for risk in risks:
+        matches = re.findall(r"'([^']+)'", risk)
+        keywords.update(matches)
+    for industry in industries:
+        matches = re.findall(r"'([^']+)'", industry)
+        keywords.update(matches)
     
-    risk_part = f"{risk_header}\n" + (
-        "\n".join(risks) if risks 
-        else "▶ 当前文本未检测到显著风险因素"
-    )
+    # 组合原始报告格式
+    risk_part = f"{risk_header}\n" + ("\n".join(risks) if risks else "▶ 当前文本未检测到显著风险因素")
+    industry_part = f"\n\n{industry_header}\n" + ("\n".join(industries) if industries else "▶ 当前文本未匹配到特定行业")
     
-    industry_part = f"\n\n{industry_header}\n" + (
-        "\n".join(industries) if industries 
-        else "▶ 当前文本未匹配到特定行业"
-    )
-    
-    return f"{risk_part}{industry_part}"
+    return {
+        "keywords": list(keywords),
+        "report": f"{risk_part}{industry_part}"
+    }
 
 if __name__ == "__main__":
     text = """

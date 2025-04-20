@@ -3,6 +3,7 @@
 <head>
     <title>Market Analysis Demo</title>
     <style>
+        /* 原有样式保持不变 */
         :root {
             --primary-color: #2c3e50;
             --accent-color: #3498db;
@@ -12,133 +13,139 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 2rem;
-            background-color: #f5f6fa;
-            color: var(--text-color);
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            color: var(--primary-color);
             text-align: center;
-            margin-bottom: 2rem;
-            font-size: 2.5rem;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        #inputText {
-            width: 100%;
-            padding: 1rem;
-            border: 2px solid #dfe6e9;
-            border-radius: 8px;
-            resize: vertical;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
+        .input-group {
+            display: flex;
+            gap: 1rem;
             margin-bottom: 1.5rem;
+            justify-content: center;
         }
 
-        #inputText:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 8px rgba(52, 152, 219, 0.2);
-        }
-
-        button {
-            background-color: var(--accent-color);
-            color: white;
-            padding: 0.8rem 2rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: transform 0.2s, box-shadow 0.2s;
-            display: block;
-            margin: 0 auto 2rem;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        .result-section {
+        .result-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 改为两列布局 */
+            gap: 2rem;
             margin-top: 2rem;
+            flex: 1;
+            min-height: 0; /* 允许内容收缩 */
+        }
+
+        .result-column {
             padding: 1.5rem;
             border-radius: 8px;
             background: white;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            height: 65vh; /* 固定高度 */
         }
 
-        .result-section:hover {
-            transform: translateY(-2px);
-        }
-
-        .report-section {
-            white-space: pre-wrap;
-            margin-top: 1.5rem;
-            padding: 1.2rem;
-            background-color: #f8f9fa;
-            border-radius: 6px;
-            border-left: 4px solid var(--accent-color);
-            font-family: 'Courier New', Courier, monospace;
-        }
-
-        #basicResult {
-            font-size: 1.2rem;
-            margin-bottom: 1rem;
-            color: var(--primary-color);
-        }
-
-        .loading {
-            display: inline-block;
-            width: 1.2rem;
-            height: 1.2rem;
-            border: 3px solid #f3f3f3;
-            border-radius: 50%;
-            border-top: 3px solid var(--accent-color);
-            animation: spin 1s linear infinite;
-            margin-right: 0.5rem;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .error {
-            color: var(--error-color);
-            background: #fdecea;
+        .analysis-section {
+            margin: 1.5rem 0;
             padding: 1rem;
-            border-radius: 6px;
-            border-left: 4px solid var(--error-color);
+            border: 1px solid #eee;
+            border-radius: 8px;
+            flex: 1;
+            min-height: 0; /* 允许内容收缩 */
+            overflow-y: auto; /* 添加滚动条 */
         }
 
-        @media (max-width: 600px) {
-            body {
-                padding: 1rem;
-            }
-            
-            h1 {
-                font-size: 2rem;
-            }
-            
-            #inputText {
-                font-size: 0.9rem;
-            }
+        /* 新增DeepSeek滚动区域样式 */
+        .deepseek-scroll {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        /* 其他原有样式保持不变 */
+        .highlight {
+            color: var(--success-color);
+            font-weight: 600;
+            background-color: #e8f5e9;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .custom-file-upload {
+            border: 2px solid var(--accent-color);
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        textarea {
+            width: 80%;
+            margin: 1rem auto;
+            display: block;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 2px solid var(--accent-color);
+            flex-shrink: 0;
+        }
+
+        button {
+            padding: 0.8rem 2rem;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 1rem 0;
+            flex-shrink: 0;
+        }
+
+        .analysis-list {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .analysis-item {
+            margin: 0.8rem 0;
+            padding: 0.8rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        .keyword-highlight {
+            color: #e74c3c;
+            font-size: 1.1em;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <h1>📈 Market Analysis Demo</h1>
+    
+    <div class="input-group">
+        <select id="presetSelect" class="custom-file-upload">
+            <option value="">选择预设文本</option>
+            <option value="preset1">科技板块动态</option>
+            <option value="preset2">关税相关新闻</option>
+            <option value="preset3">小米新闻</option>
+        </select>
+        
+        <label class="custom-file-upload">
+            📁 上传TXT文件
+            <input type="file" id="fileInput" accept=".txt">
+        </label>
+    </div>
+
     <textarea 
         id="inputText" 
         rows="6"
@@ -149,38 +156,112 @@
         Analyze Text
     </button>
 
-    <div class="result-section">
-        <div id="basicResult"></div>
-        <div id="reportResult" class="report-section"></div>
+    <div class="result-container">
+        <!-- 第一列：详细报告 -->
+        <div class="result-column">
+            <div class="analysis-section">
+                <h3>📊 基础分析结果</h3>
+                <div id="basicResult" class="analysis-list"></div>
+            </div>
+            
+            <div class="analysis-section">
+                <h3>🔍 详细报告</h3>
+                <div id="reportResult" class="analysis-list"></div>
+            </div>
+        </div>
+
+        <!-- 第二列：DeepSeek分析 -->
+        <div class="result-column">
+            <div class="analysis-section" style="flex: 2;">
+                <h3>🤖 DeepSeek AI分析</h3>
+                <div id="deepseekAnalysis" class="analysis-list deepseek-scroll"></div>
+            </div>
+        </div>
     </div>
 
+
     <script>
-        async function predict() {
-            const basicDiv = document.getElementById('basicResult');
-            const reportDiv = document.getElementById('reportResult');
-            basicDiv.innerHTML = `<span class="loading"></span>Analyzing...`;
-            reportDiv.innerHTML = "";
-
-            const inputText = document.getElementById('inputText').value;
-
-            try {
-                const response = await fetch('/predict', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ text: inputText })
-                });
-
-                const result = await response.json();
-                if (response.ok) {
-                    basicDiv.innerHTML = `<strong>📊 Market Trend:</strong> ${result.result}`;
-                    reportDiv.innerHTML = `<strong>🔍 Detailed Analysis:</strong>\n${result.report}`;
-                } else {
-                    basicDiv.innerHTML = `<div class="error">⚠️ Error: ${result.error}</div>`;
-                }
-            } catch (error) {
-                basicDiv.innerHTML = `<div class="error">⚠️ Connection Error: ${error.message}</div>`;
+        // 文件上传处理（保持不变）
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type === 'text/plain') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('inputText').value = e.target.result;
+                };
+                reader.readAsText(file);
             }
+        });
+
+        const presetTexts = {
+            preset1: "Dow Soars 500 Points as Tech Giants Report Record Profits Ahead of Earnings Season.Fed Announces Unexpected Rate Cut, Sending Wall Street into Bullish Rally.Apple Unveils Revolutionary New iPhone, Sending Tech Stocks Skyrocketing.Oil Prices Plunge 10% Amid OPEC Supply Deal Collapse, Boosting Consumer Sentiment.Healthcare Sector Surges After FDA Approves Breakthrough Cancer Drug.Tesla Stock Jumps 20% on Rumors of New China Manufacturing Deal.Wall Street Celebrates as Trade War With China Suddenly Halts, Tariffs Rolled Back.Goldman Sachs Reports Triple Quarterly Earnings, Sparking Financial Sector Rally.U.S. Unemployment Drops to 3.5%, Igniting Optimism in Retail and Consumer Stocks.Amazon Announces $10 Billion Green Energy Investment, Green Tech Stocks Surge.Pharma Giant Pfizer Secures Global Vaccine Patent, Shares Leap 15%.Bitcoin Surges Past $100K Amid Institutional Adoption Surge, Crypto Stocks Follow.Boeing Receives $15 Billion Defense Contract, Aerospace Sector Soars.Retailers Report Holiday Sales Boom, Wal-Mart and Target Shares Hit Record Highs.Federal Infrastructure Bill Passes Congress, Boosting Construction and Steel Stocks.European Central Bank Signals Support for Dollar, Strengthening U.S. Exporters.FAANG Stocks Rally 8% as Analysts Upgrade Growth Forecasts for 2024.Tesla Opens World’s Largest Battery Plant, Shares Climb to Uncharted Heights.Consumer Confidence Index Hits 15-Year High, Driving Auto and Travel Stocks.Oil Majors Announce $50 Billion Dividend Boosts, Energy Sector Roars Back.Microsoft Acquires AI Startup for $20 Billion, Tech Sector Cheers Innovation.FDA Approves First Alzheimer’s Drug, Biotech Stocks Rally Across the Board.Fed Chair Signals Pause in Rate Hikes, Bond Yields Drop and Stocks Soar.Apple Pay Launches in India, Sending Global Payment Stocks into Overdrive.U.S. GDP Growth Revised Upward to 4%, Marking Strongest Quarter Since 2008",
+            preset2: "The Dow plunges 800 points as tech giants report disappointing earnings ahead of season. The Fed signals a rate hike surprise, triggering a market sell-off. Apple faces a data breach crisis, shares collapse 12%. Oil prices surge 15% after OPEC+ cuts supply, consumer stocks plunge. The FDA halts clinical trials for a leading cancer drug, biotech sector tanks. Tesla warns of production delays, stock drops 25% on supply chain woes. Trade war escalates as China imposes new tariffs, global markets reel. Goldman Sachs reports a $2 billion loss, financial stocks dive. U.S. unemployment jumps to 6.5%, retail stocks plunge on weak consumer data. Amazon faces an antitrust lawsuit, shares drop 18% amid regulatory crackdown. Pfizer loses a patent battle, shares plunge as generic competitors enter the market. Bitcoin plummets 30% after a major exchange hack, crypto stocks crash.Boeing delays 787 Dreamliner delivery, aerospace stocks collapse. Retailers report a holiday sales slump, Wal-Mart and Target shares hit 52-week lows. The infrastructure bill fails in Congress, construction stocks plunge. The ECB raises rates, weakening the dollar and harming U.S. exports. FAANG stocks crash 15% as analysts slash growth forecasts. Tesla shuts a Gigafactory over safety issues, shares plunge to an 18-month low.Consumer confidence drops to a 10-year low, auto stocks collapse. Oil majors cut dividends amid price volatility, the energy sector tanks. Microsoft loses a major cloud contract, tech stocks slide. The FDA rejects an Alzheimer’s drug, the biotech sector plunges 10%. The Fed chair signals more rate hikes, bond yields spike and stocks plunge. Apple Pay faces a regulatory ban in India, payment stocks plummet. U.S. GDP growth is revised down to 1.2%, the worst quarter since 2009.",
+            preset3: "Xiaomi EV Crash in Beijing Sparks Safety Concerns: Investigation Underway. High-Profile Collision Involving Xiaomi's New EV Model Raises Questions on Autonomous Driving Tech. First Reported Xiaomi SU7 Accident Triggers Calls for Regulatory Scrutiny on Emerging EV Brands."
+        };
+        document.getElementById('presetSelect').addEventListener('change', function(e) {
+            const selectedValue = e.target.value;
+            const inputText = document.getElementById('inputText');
+            if (presetTexts[selectedValue]) {
+                inputText.value = presetTexts[selectedValue];
+            } else {
+                inputText.value = ''; // 如果未选择预设文本，则清空文本框
+            }
+        });
+        async function predict() {
+        const basicDiv = document.getElementById('basicResult');
+        const reportDiv = document.getElementById('reportResult');
+        const deepseekDiv = document.getElementById('deepseekAnalysis');
+        
+        // 清空并显示加载状态
+        [basicDiv, reportDiv, deepseekDiv].forEach(div => {
+            div.innerHTML = `<div class="analysis-item">🔃 分析中...</div>`;
+        });
+
+        const inputText = document.getElementById('inputText').value;
+
+        try {
+            const response = await fetch('/predict', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ text: inputText })
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                // 基础结果处理
+                basicDiv.innerHTML = `
+                    <div class="analysis-item">
+                        <strong>市场趋势:</strong> ${result.result}
+                    </div>
+                `;
+
+                // ========== 详细报告处理 ==========
+                const reportWithKeywords = result.report
+                    .replace(/\*\*(.*?)\*\*/g, '<span class="keyword-highlight">$1</span>') // 关键词替换
+                    .split('\n')  // 按段落拆分
+                    .map(line => 
+                        line.trim() ? `<div class="analysis-item">${line}</div>` : '' // 空行过滤
+                    )
+                    .join('');
+                reportDiv.innerHTML = reportWithKeywords;
+
+                // ========== DeepSeek分析处理 ==========
+                const deepseekWithKeywords = result.deepseek_analysis
+                    .replace(/\*\*(.*?)\*\*/g, '<span class="keyword-highlight">$1</span>') // 关键词替换
+                    .split('\n')  // 按段落拆分
+                    .map(line => 
+                        line.trim() ? `<div class="analysis-item">${line}</div>` : '' // 空行过滤
+                    )
+                    .join('');
+                deepseekDiv.innerHTML = deepseekWithKeywords;
+
+            } else {
+                basicDiv.innerHTML = `<div class="analysis-item error">⚠️ 错误: ${result.error}</div>`;
+            }
+        } catch (error) {
+            basicDiv.innerHTML = `<div class="analysis-item error">⚠️ 连接错误: ${error.message}</div>`;
         }
+    }
     </script>
 </body>
 </html>
