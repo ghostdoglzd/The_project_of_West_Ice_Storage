@@ -1,293 +1,88 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Market Analysis Demo</title>
-    <style>
-        #basicResult {
-            height: auto; /* 自动高度 */
-            overflow-y: hidden; /* 移除滚动条 */
-            margin: 10px 0;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 0.5rem;
-            min-height: 50px; /* 最小高度保持美观 */
-        }
+# app.py
+from flask import Flask, request, jsonify, render_template
+import requests
+import os
+from dotenv import load_dotenv
+from xbk import Pre_model as Pre
+from xbk.Generate_model import generate_report
 
-        /* 新增紧凑布局样式 */
-        .compact-analysis {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-            padding: 0.5rem;
-        }
+load_dotenv()  # 加载环境变量
 
-        /* 调整详细报告区域填充剩余空间 */
-        #reportResult {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-        }
+app = Flask(__name__)
+DEEPSEEK_API_KEY = "sk-6e03af0b762a43ddb92aae83076907f8"
 
-        /* 原有样式保持不变 */
-        :root {
-            --primary-color: #2c3e50;
-            --accent-color: #3498db;
-            --success-color: #27ae60;
-            --error-color: #e74c3c;
-            --text-color: #34495e;
-        }
+@app.route('/')
+def home():
+    return render_template('index.html')
 
-        body {
-            text-align: center;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            font-family: Arial, sans-serif;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-        .input-group {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-            justify-content: center;
-        }
-
-        .result-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr; /* 改为两列布局 */
-            gap: 2rem;
-            margin-top: 2rem;
-            flex: 1;
-            min-height: 0; /* 允许内容收缩 */
-        }
-
-        .result-column {
-            padding: 1.5rem;
-            border-radius: 8px;
-            background: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-align: left;
-            display: flex;
-            flex-direction: column;
-            height: 65vh; /* 固定高度 */
-        }
-
-        .analysis-section {
-            margin: 1.5rem 0;
-            padding: 1rem;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            flex: 1;
-            min-height: 0; /* 允许内容收缩 */
-            overflow-y: auto; /* 添加滚动条 */
-        }
-
-        /* 新增DeepSeek滚动区域样式 */
-        .deepseek-scroll {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 10px;
-        }
-
-        /* 其他原有样式保持不变 */
-        .highlight {
-            color: var(--success-color);
-            font-weight: 600;
-            background-color: #e8f5e9;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
-        }
-
-        #fileInput {
-            display: none;
-        }
-
-        .custom-file-upload {
-            border: 2px solid var(--accent-color);
-            padding: 0.6rem 1.2rem;
-            border-radius: 6px;
-            cursor: pointer;
-            background: rgba(52, 152, 219, 0.1);
-        }
-
-        textarea {
-            width: 80%;
-            margin: 1rem auto;
-            display: block;
-            padding: 1rem;
-            border-radius: 8px;
-            border: 2px solid var(--accent-color);
-            flex-shrink: 0;
-        }
-
-        button {
-            padding: 0.8rem 2rem;
-            background-color: var(--accent-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            margin: 1rem 0;
-            flex-shrink: 0;
-        }
-
-        .analysis-list {
-            list-style-type: none;
-            padding: 0;
-        }
-
-        .analysis-item {
-            margin: 0.8rem 0;
-            padding: 0.8rem;
-            background: #f8f9fa;
-            border-radius: 6px;
-        }
-        .keyword-highlight {
-            color: #e74c3c;
-            font-size: 1.1em;
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body>
-    <h1>📈 Market Analysis Demo</h1>
-    
-    <div class="input-group">
-        <select id="presetSelect" class="custom-file-upload">
-            <option value="">选择预设文本</option>
-            <option value="preset1">科技板块动态</option>
-            <option value="preset2">关税相关新闻</option>
-            <option value="preset3">小米新闻</option>
-        </select>
-        
-        <label class="custom-file-upload">
-            📁 上传TXT文件
-            <input type="file" id="fileInput" accept=".txt">
-        </label>
-    </div>
-
-    <textarea 
-        id="inputText" 
-        rows="6"
-        placeholder="Enter today's market news here..."
-    ></textarea>
-    
-    <button onclick="predict()">
-        Analyze Text
-    </button>
-
-    <div class="result-container">
-        <!-- 第一列：详细报告 -->
-        <div class="result-column">
-            <div class="analysis-section" style="flex: 0.25;"> <!-- 高度比例改为1/4 -->
-                <h3>📊 基础分析结果</h3>
-                <div id="basicResult" class="analysis-list"></div>
-            </div>
-            
-            <div class="analysis-section" style="flex: 0.75;"> <!-- 剩余3/4空间 -->
-                <h3>🔍 详细报告</h3>
-                <div id="reportResult" class="analysis-list"></div>
-            </div>
-        </div>
-
-        <!-- 第二列：DeepSeek分析 -->
-        <div class="result-column">
-            <div class="analysis-section" style="flex: 2;">
-                <h3>🤖 DeepSeek AI分析</h3>
-                <div id="deepseekAnalysis" class="analysis-list deepseek-scroll"></div>
-            </div>
-        </div>
-    </div>
-
-
-    <script>
-        // 文件上传处理（保持不变）
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file && file.type === 'text/plain') {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('inputText').value = e.target.result;
-                };
-                reader.readAsText(file);
-            }
-        });
-
-        const presetTexts = {
-            preset1: "Dow Soars 500 Points as Tech Giants Report Record Profits Ahead of Earnings Season.Fed Announces Unexpected Rate Cut, Sending Wall Street into Bullish Rally.Apple Unveils Revolutionary New iPhone, Sending Tech Stocks Skyrocketing.Oil Prices Plunge 10% Amid OPEC Supply Deal Collapse, Boosting Consumer Sentiment.Healthcare Sector Surges After FDA Approves Breakthrough Cancer Drug.Tesla Stock Jumps 20% on Rumors of New China Manufacturing Deal.Wall Street Celebrates as Trade War With China Suddenly Halts, Tariffs Rolled Back.Goldman Sachs Reports Triple Quarterly Earnings, Sparking Financial Sector Rally.U.S. Unemployment Drops to 3.5%, Igniting Optimism in Retail and Consumer Stocks.Amazon Announces $10 Billion Green Energy Investment, Green Tech Stocks Surge.Pharma Giant Pfizer Secures Global Vaccine Patent, Shares Leap 15%.Bitcoin Surges Past $100K Amid Institutional Adoption Surge, Crypto Stocks Follow.Boeing Receives $15 Billion Defense Contract, Aerospace Sector Soars.Retailers Report Holiday Sales Boom, Wal-Mart and Target Shares Hit Record Highs.Federal Infrastructure Bill Passes Congress, Boosting Construction and Steel Stocks.European Central Bank Signals Support for Dollar, Strengthening U.S. Exporters.FAANG Stocks Rally 8% as Analysts Upgrade Growth Forecasts for 2024.Tesla Opens World’s Largest Battery Plant, Shares Climb to Uncharted Heights.Consumer Confidence Index Hits 15-Year High, Driving Auto and Travel Stocks.Oil Majors Announce $50 Billion Dividend Boosts, Energy Sector Roars Back.Microsoft Acquires AI Startup for $20 Billion, Tech Sector Cheers Innovation.FDA Approves First Alzheimer’s Drug, Biotech Stocks Rally Across the Board.Fed Chair Signals Pause in Rate Hikes, Bond Yields Drop and Stocks Soar.Apple Pay Launches in India, Sending Global Payment Stocks into Overdrive.U.S. GDP Growth Revised Upward to 4%, Marking Strongest Quarter Since 2008",
-            preset2: "The Dow plunges 800 points as tech giants report disappointing earnings ahead of season. The Fed signals a rate hike surprise, triggering a market sell-off. Apple faces a data breach crisis, shares collapse 12%. Oil prices surge 15% after OPEC+ cuts supply, consumer stocks plunge. The FDA halts clinical trials for a leading cancer drug, biotech sector tanks. Tesla warns of production delays, stock drops 25% on supply chain woes. Trade war escalates as China imposes new tariffs, global markets reel. Goldman Sachs reports a $2 billion loss, financial stocks dive. U.S. unemployment jumps to 6.5%, retail stocks plunge on weak consumer data. Amazon faces an antitrust lawsuit, shares drop 18% amid regulatory crackdown. Pfizer loses a patent battle, shares plunge as generic competitors enter the market. Bitcoin plummets 30% after a major exchange hack, crypto stocks crash.Boeing delays 787 Dreamliner delivery, aerospace stocks collapse. Retailers report a holiday sales slump, Wal-Mart and Target shares hit 52-week lows. The infrastructure bill fails in Congress, construction stocks plunge. The ECB raises rates, weakening the dollar and harming U.S. exports. FAANG stocks crash 15% as analysts slash growth forecasts. Tesla shuts a Gigafactory over safety issues, shares plunge to an 18-month low.Consumer confidence drops to a 10-year low, auto stocks collapse. Oil majors cut dividends amid price volatility, the energy sector tanks. Microsoft loses a major cloud contract, tech stocks slide. The FDA rejects an Alzheimer’s drug, the biotech sector plunges 10%. The Fed chair signals more rate hikes, bond yields spike and stocks plunge. Apple Pay faces a regulatory ban in India, payment stocks plummet. U.S. GDP growth is revised down to 1.2%, the worst quarter since 2009.",
-            preset3: "Xiaomi EV Crash in Beijing Sparks Safety Concerns: Investigation Underway. High-Profile Collision Involving Xiaomi's New EV Model Raises Questions on Autonomous Driving Tech. First Reported Xiaomi SU7 Accident Triggers Calls for Regulatory Scrutiny on Emerging EV Brands."
-        };
-        document.getElementById('presetSelect').addEventListener('change', function(e) {
-            const selectedValue = e.target.value;
-            const inputText = document.getElementById('inputText');
-            if (presetTexts[selectedValue]) {
-                inputText.value = presetTexts[selectedValue];
-            } else {
-                inputText.value = ''; // 如果未选择预设文本，则清空文本框
-            }
-        });
-        async function predict() {
-        const basicDiv = document.getElementById('basicResult');
-        const reportDiv = document.getElementById('reportResult');
-        const deepseekDiv = document.getElementById('deepseekAnalysis');
-        
-        // 清空并显示加载状态
-        [basicDiv, reportDiv, deepseekDiv].forEach(div => {
-            div.innerHTML = `<div class="analysis-item">🔃 分析中...</div>`;
-        });
-
-        const inputText = document.getElementById('inputText').value;
-
-        try {
-            const response = await fetch('/predict', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ text: inputText })
-            });
-
-            const result = await response.json();
-            if (response.ok) {
-                // 基础结果处理
-                basicDiv.innerHTML = `
-                    <div class="compact-analysis">
-                    <div><strong>📈 趋势:</strong> ${result.result}</div>
-                    <div><strong>📊 概率:</strong> ${result.probability}%</div>
-                    </div>
-                `;
-
-                // ========== 详细报告处理 ==========
-                const reportWithKeywords = result.report
-                    .replace(/\*\*(.*?)\*\*/g, '<span class="keyword-highlight">$1</span>') // 关键词替换
-                    .split('\n')  // 按段落拆分
-                    .map(line => 
-                        line.trim() ? `<div class="analysis-item">${line}</div>` : '' // 空行过滤
-                    )
-                    .join('');
-                reportDiv.innerHTML = reportWithKeywords;
-
-                // ========== DeepSeek分析处理 ==========
-                const deepseekWithKeywords = result.deepseek_analysis
-                    .replace(/\*\*(.*?)\*\*/g, '<span class="keyword-highlight">$1</span>') // 关键词替换
-                    .split('\n')  // 按段落拆分
-                    .map(line => 
-                        line.trim() ? `<div class="analysis-item">${line}</div>` : '' // 空行过滤
-                    )
-                    .join('');
-                deepseekDiv.innerHTML = deepseekWithKeywords;
-
-            } else {
-                basicDiv.innerHTML = `<div class="analysis-item error">⚠️ 错误: ${result.error}</div>`;
-            }
-        } catch (error) {
-            basicDiv.innerHTML = `<div class="analysis-item error">⚠️ 连接错误: ${error.message}</div>`;
-        }
+def get_deepseek_analysis(prompt):
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
     }
-    </script>
-</body>
-</html>
+    data = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "user", "content": f"作为专业市场分析师，请对以下分析结果进行深度解读:\n{prompt}"}
+        ],
+        "temperature": 0.7
+    }
+    session = requests.Session()
+    retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+    try:
+        response = session.post(
+            "https://api.deepseek.com/v1/chat/completions",
+            json=data,
+            headers=headers,
+            timeout=60
+        )
+        response.raise_for_status()
+        result = response.json()
+        return result['choices'][0]['message']['content']
+    except requests.exceptions.Timeout:
+        return "API请求超时，请稍后重试"
+    except requests.exceptions.RequestException as e:
+        return f"API请求失败: {str(e)}"
+    
+@app.route('/predict', methods=['POST'])
+def predict():
+    data = request.get_json()
+    if not data or 'text' not in data:
+        return jsonify({'error': 'Invalid input data'}), 400
+
+    text = data['text']
+    try:
+        # 原分类模型预测
+        model_path = "./model/model.pth"
+        model_wrapper = Pre.ModelWrapper(model_path, example_text=text)
+        prediction = model_wrapper.predict(text)
+        res = "今日大盘看涨" if prediction>0.5 else "今日大盘看跌"
+        prob = prediction if prediction>0.5 else 1 - prediction
+        report_data = generate_report(text)  # 修改为接收字典
+
+        # 组合关键词标记的报告
+        marked_report = report_data["report"]
+        for keyword in report_data["keywords"]:
+            marked_report = marked_report.replace(keyword, f"**{keyword}**")
+
+        # 调用DeepSeek API
+        analysis_prompt = f"基础分析结果: {res}\n详细报告: {marked_report}"
+        deepseek_analysis = get_deepseek_analysis(analysis_prompt)
+
+        return jsonify({
+            'result': res,  # 返回预测结果
+            'probability': prob,  # 返回概率
+            'report': marked_report,  # 包含**标记的报告
+            'keywords': report_data["keywords"],  # 单独传递关键词列表
+            'deepseek_analysis': deepseek_analysis
+        })
+
+    except Exception as e:
+        return jsonify({'error': f"Runtime error: {str(e)}"}), 500
+
+if __name__ == '__main__':
+    app.run(port=5000)
