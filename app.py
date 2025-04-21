@@ -60,7 +60,7 @@ def predict():
         model_path = "./model/model.pth"
         model_wrapper = Pre.ModelWrapper(model_path, example_text=text)
         prediction = model_wrapper.predict(text)
-        res = "今日大盘看涨" if prediction>0.5 else "今日大盘看涨"
+        res = "今日大盘看涨" if prediction>0.5 else "今日大盘看跌"
         prob = prediction if prediction>0.5 else 1 - prediction
         report_data = generate_report(text)  # 修改为接收字典
 
