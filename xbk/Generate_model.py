@@ -355,14 +355,14 @@ class RiskAnalyzer:
         
         # 准备风险提示模板
         risk_templates = [
-            "监测到'{match}'相关风险，可能对市场造成冲击。",
-            "请注意，'{match}'可能引发行业波动，建议谨慎评估。",
-            "风险提示：'{match}'或导致投资环境变化，请保持关注。",
-            "检测到潜在风险因素'{match}'，可能影响相关资产表现。",
-            "市场风险预警：'{match}'可能带来不确定性。",
-            "投资者需警惕'{match}'的潜在负面影响。",
-            "行业观察：'{match}'风险升高，建议调整策略。",
-            "重要风险提示：'{match}'可能成为市场变数。"
+            "'{match}'",
+            "'{match}'",
+            "'{match}'",
+            "'{match}'",
+            "'{match}'",
+            "'{match}'",
+            "'{match}'",
+            "'{match}'"
         ]
         
         # 去重并生成多样化提示
@@ -418,14 +418,14 @@ class IndustryMatcher:
         
         # 准备行业推荐模板
         industry_templates = [
-            "推荐关注行业：'{industry}'，近期发展潜力较大。",
-            "行业动态：'{industry}'领域或存在投资机会。",
-            "建议重点关注'{industry}'行业的市场动向。",
-            "投资机会：'{industry}'领域可能迎来增长期。",
-            "行业分析：'{industry}'具备较高的关注价值。",
-            "'{industry}'行业前景广阔，建议纳入观察列表。",
-            "市场趋势显示，'{industry}'行业值得投资者留意。",
-            "关注领域推荐：'{industry}'或成为下一热点。"
+            "'{industry}'",
+            "'{industry}'",
+            "'{industry}'",
+            "'{industry}'",
+            "'{industry}'",
+            "'{industry}'",
+            "'{industry}'",
+            "'{industry}'"
         ]
         
         # 生成多样化推荐语
